@@ -6,7 +6,7 @@ import { seedEvents } from '../src/db/seed.js';
 const db = openDatabase(':memory:');
 migrate(db);
 seedEvents(db);
-const app = buildApp({ db });
+const app = await buildApp({ db });
 
 type InjectResponse = Awaited<ReturnType<typeof app.inject>>;
 
@@ -211,5 +211,31 @@ describe('POST /v1/audiences/preview', () => {
       const body = jsonOf(res);
       expect(body.error.code).toBe('NOT_FOUND');
     });
+  });
+});
+
+describe('CORS (browser frontend consumes this API cross-origin)', () => {
+  it('answers preflight requests and reflects the allowed origin', async () => {
+    const res = await app.inject({
+      method: 'OPTIONS',
+      url: '/v1/audiences/preview',
+      headers: {
+        origin: 'http://localhost:5173',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'content-type',
+      },
+    });
+    expect(res.statusCode).toBe(204);
+    expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+    expect(res.headers['access-control-allow-methods']).toContain('POST');
+  });
+
+  it('adds CORS headers to API responses', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/health',
+      headers: { origin: 'http://localhost:5173' },
+    });
+    expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5173');
   });
 });

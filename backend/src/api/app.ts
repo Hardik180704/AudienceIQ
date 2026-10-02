@@ -1,4 +1,5 @@
 import Fastify, { FastifyError, type FastifyInstance } from 'fastify';
+import cors from '@fastify/cors';
 import { previewAudience } from '../audiences/service.js';
 import type { Db } from '../db/database.js';
 import { errorBody, validationErrorBody } from './errors.js';
@@ -8,10 +9,12 @@ export interface AppOptions {
   db: Db;
 }
 
-export function buildApp(options: AppOptions): FastifyInstance {
+export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: { level: process.env.LOG_LEVEL ?? 'info' },
   });
+
+  await app.register(cors, { origin: true });
 
   app.get('/health', async () => ({ status: 'ok' }));
 

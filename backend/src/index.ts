@@ -9,7 +9,7 @@ const db = openDatabase();
 migrate(db);
 ensureSeeded(db);
 
-const app = buildApp({ db });
+const app = await buildApp({ db });
 
 app.listen({ port, host }).catch((error) => {
   app.log.error(error, 'failed to start server');

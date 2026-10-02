@@ -27,6 +27,7 @@ SQLite (better-sqlite3, parameterized queries)
 | Layer    | Choice                                       | Why                                            |
 | -------- | -------------------------------------------- | ---------------------------------------------- |
 | Backend  | TypeScript, Fastify 5, zod, better-sqlite3   | small, explicit, typed HTTP layer + safe SQL   |
+| CORS     | @fastify/cors                                | the Vite frontend (:5173) consumes the API cross-origin, so preflights and responses carry proper `Access-Control-*` headers |
 | Runtime  | tsx (dev and start)                          | no build artifacts required, strict typecheck  |
 | Tests    | vitest                                       | fast unit + API-level tests via `app.inject`   |
 | Frontend | React 19 + TypeScript + Vite                 | one screen, minimal deps                       |
