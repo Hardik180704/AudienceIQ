@@ -5,12 +5,26 @@ import ConditionRow from './ConditionRow';
 import Icon from './icons';
 import type { AudienceRequest, Condition, Operator, PreviewResponse } from './types';
 
-const DEFAULT_AS_OF = '2026-09-29T00:00:00.000Z';
+const DEFAULT_AS_OF_MS = Date.parse('2026-09-29T00:00:00.000Z');
 const MAX_CONDITIONS = 10;
 
 interface ConditionEntry {
   id: string;
   condition: Condition;
+}
+
+function msToLocalInputValue(ms: number): string {
+  const date = new Date(ms);
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function localInputToIso(value: string): string | undefined {
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) {
+    return undefined;
+  }
+  return new Date(Math.round(ms / 1000) * 1000).toISOString();
 }
 
 type PreviewState =
@@ -36,7 +50,7 @@ function operatorGlyph(operator: Operator): string {
 
 export default function App() {
   const [name, setName] = useState('Viewed but not purchased');
-  const [asOf, setAsOf] = useState(DEFAULT_AS_OF);
+  const [asOfLocal, setAsOfLocal] = useState(() => msToLocalInputValue(DEFAULT_AS_OF_MS));
   const [conditions, setConditions] = useState<ConditionEntry[]>([newConditionEntry()]);
   const [status, setStatus] = useState<PreviewState>({ kind: 'idle' });
   const [apiStatus, setApiStatus] = useState<HealthStatus>('checking');
@@ -67,11 +81,12 @@ export default function App() {
 
   function validateRequest(): { request?: AudienceRequest; issues: string[] } {
     const issues: string[] = [];
+    const asOfIso = localInputToIso(asOfLocal);
     if (!name.trim()) {
       issues.push('Audience name is required.');
     }
-    if (!Number.isFinite(Date.parse(asOf))) {
-      issues.push('asOf must be a valid ISO 8601 timestamp, e.g. 2026-09-29T00:00:00.000Z');
+    if (!asOfIso) {
+      issues.push('Choose a valid reference date and time.');
     }
     if (conditions.length === 0) {
       issues.push('Add at least one condition.');
@@ -88,14 +103,14 @@ export default function App() {
         issues.push(`Condition ${index + 1}: "within days" must be an integer between 1 and 365.`);
       }
     });
-    if (issues.length > 0 || !Number.isFinite(Date.parse(asOf))) {
+    if (issues.length > 0 || asOfIso === undefined) {
       return { issues };
     }
     return {
       issues,
       request: {
         name: name.trim(),
-        asOf,
+        asOf: asOfIso,
         conditions: conditions.map((entry) => entry.condition),
       },
     };
@@ -281,7 +296,7 @@ export default function App() {
             <h2 id="rule-heading">Audience definition</h2>
             <p>
               Pick events, thresholds and time windows. Conditions are combined with AND, and
-              evaluation is pinned to <code>asOf</code> so previews are reproducible.
+              evaluation is pinned to a reference instant so previews are reproducible.
             </p>
           </div>
 
@@ -299,18 +314,23 @@ export default function App() {
             </div>
 
             <div className="field">
-              <label htmlFor="as-of">Reference time (asOf)</label>
+              <label htmlFor="as-of">Reference time</label>
               <input
                 id="as-of"
-                type="text"
-                className="input-mono"
-                value={asOf}
-                onChange={(event) => setAsOf(event.target.value)}
+                type="datetime-local"
+                step={1}
+                value={asOfLocal}
+                onChange={(event) => setAsOfLocal(event.target.value)}
                 aria-describedby="as-of-hint"
-                spellCheck={false}
               />
-              <p id="as-of-hint" className="hint">
-                ISO 8601 timestamp, e.g. 2026-09-29T00:00:00.000Z
+              <p id="as-of-hint" className="hint asof-preview">
+                {localInputToIso(asOfLocal) ? (
+                  <>
+                    evaluated as <code>{localInputToIso(asOfLocal)}</code> (UTC)
+                  </>
+                ) : (
+                  'previews are evaluated relative to this instant'
+                )}
               </p>
             </div>
 

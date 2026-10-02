@@ -114,8 +114,9 @@ Response (abridged):
 ## How to preview an audience (operator flow)
 
 1. Open `http://localhost:5173`.
-2. Enter an audience name and a reference time (`asOf`, ISO 8601). Evaluation is relative to
-   that instant — never the server clock — so previews are reproducible.
+2. Enter an audience name and pick a reference time. The picker resolves to an exact UTC
+   instant (ISO 8601, shown under the field) — evaluation is relative to that instant, never
+   the server clock, so previews are reproducible.
 3. Add, edit, or remove conditions. Each condition picks an event type, an operator
    (`at_least` / `exactly`), a count, and a time window in days. Conditions combine with AND.
 4. Choose **Preview audience**. Results list the audience size and every matching anonymous
