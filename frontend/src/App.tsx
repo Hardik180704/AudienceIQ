@@ -184,8 +184,8 @@ export default function App() {
                 <li key={member.anonymousId} className="member-card">
                   <code className="member-id">{member.anonymousId}</code>
                   <ul className="evidence">
-                    {member.evidence.map((item) => (
-                      <li key={item.eventType}>
+                    {member.evidence.map((item, evidenceIndex) => (
+                      <li key={evidenceIndex}>
                         <code>{item.eventType}</code>
                         <span className="evidence-detail">
                           observed {item.observedCount} · needs {operatorPhrase(item.operator)}{' '}
