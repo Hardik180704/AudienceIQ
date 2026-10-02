@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { ApiError, previewAudience } from './api';
+import { ApiError, checkHealth, previewAudience } from './api';
 import ConditionRow from './ConditionRow';
+import Icon from './icons';
 import type { AudienceRequest, Condition, Operator, PreviewResponse } from './types';
 
 const DEFAULT_AS_OF = '2026-09-29T00:00:00.000Z';
@@ -20,6 +21,8 @@ type PreviewState =
   | { kind: 'empty'; result: PreviewResponse }
   | { kind: 'error'; message: string };
 
+type HealthStatus = 'checking' | 'online' | 'offline';
+
 function newConditionEntry(): ConditionEntry {
   return {
     id: crypto.randomUUID(),
@@ -27,8 +30,8 @@ function newConditionEntry(): ConditionEntry {
   };
 }
 
-function operatorPhrase(operator: Operator): string {
-  return operator === 'at_least' ? 'at least' : 'exactly';
+function operatorGlyph(operator: Operator): string {
+  return operator === 'at_least' ? '≥' : '=';
 }
 
 export default function App() {
@@ -36,6 +39,11 @@ export default function App() {
   const [asOf, setAsOf] = useState(DEFAULT_AS_OF);
   const [conditions, setConditions] = useState<ConditionEntry[]>([newConditionEntry()]);
   const [status, setStatus] = useState<PreviewState>({ kind: 'idle' });
+  const [apiStatus, setApiStatus] = useState<HealthStatus>('checking');
+
+  useEffect(() => {
+    void checkHealth().then((healthy) => setApiStatus(healthy ? 'online' : 'offline'));
+  }, []);
 
   function updateCondition(id: string, patch: Partial<Condition>): void {
     setConditions((current) =>
@@ -97,6 +105,7 @@ export default function App() {
     setStatus({ kind: 'loading' });
     try {
       const result = await previewAudience(request);
+      setApiStatus('online');
       setStatus(result.total === 0 ? { kind: 'empty', result } : { kind: 'success', result });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -104,6 +113,9 @@ export default function App() {
         setStatus({ kind: 'error', message: `${error.message}${detail}` });
       } else {
         setStatus({ kind: 'error', message: 'Something went wrong. Please retry.' });
+      }
+      if (error instanceof ApiError && error.code === 'NETWORK_ERROR') {
+        void checkHealth().then((healthy) => setApiStatus(healthy ? 'online' : 'offline'));
       }
     }
   }
@@ -122,17 +134,24 @@ export default function App() {
     switch (status.kind) {
       case 'idle':
         return (
-          <p className="state-hint">
-            Define an audience on the left, then choose <strong>Preview audience</strong> to see
-            which anonymous users match and the evidence that explains each match.
-          </p>
+          <div className="state-panel state-idle">
+            <div className="state-icon">
+              <Icon name="chart" size={20} />
+            </div>
+            <p className="state-title">Nothing previewed yet</p>
+            <p className="state-body">
+              Define the audience on the left, then run a preview. Matching anonymous users and
+              the evidence explaining each match will appear here.
+            </p>
+          </div>
         );
       case 'validation':
         return (
-          <div className="alert" role="alert">
-            <p>
-              <strong>Check the form before previewing:</strong>
-            </p>
+          <div className="alert alert-warn" role="alert">
+            <div className="alert-header">
+              <Icon name="alert" size={16} />
+              <strong>Fix the form before previewing</strong>
+            </div>
             <ul>
               {status.issues.map((issue) => (
                 <li key={issue}>{issue}</li>
@@ -142,61 +161,93 @@ export default function App() {
         );
       case 'loading':
         return (
-          <p className="state-loading" aria-live="polite">
-            Previewing audience…
-          </p>
+          <>
+            <div className="skeleton-summary" aria-hidden="true">
+              <div className="skeleton skeleton-stat" />
+              <div className="skeleton skeleton-meta" />
+            </div>
+            <div className="skeleton-list" aria-hidden="true">
+              <div className="skeleton skeleton-row" />
+              <div className="skeleton skeleton-row" />
+              <div className="skeleton skeleton-row" />
+            </div>
+            <p className="visually-hidden" aria-live="polite">
+              Previewing audience…
+            </p>
+          </>
         );
       case 'empty':
         return (
-          <div className="state-empty">
-            <p>
-              <strong>No users matched this audience.</strong>
-            </p>
-            <p>
-              Try lowering the counts or widening the time window, then preview again. The API can
-              be reached — it simply found no match.
+          <div className="state-panel state-empty">
+            <div className="state-icon">
+              <Icon name="user-x" size={20} />
+            </div>
+            <p className="state-title">No users matched</p>
+            <p className="state-body">
+              The API is reachable — it simply found no matching users. Try lowering the counts
+              or widening the time window, then preview again.
             </p>
           </div>
         );
       case 'error':
         return (
-          <div className="alert error" role="alert">
-            <p>
-              <strong>Preview failed:</strong> {status.message}
-            </p>
-            <button type="button" className="button primary retry" onClick={() => void handleSubmit()}>
-              Retry
+          <div className="alert alert-error" role="alert">
+            <div className="alert-header">
+              <Icon name="alert" size={16} />
+              <strong>Preview failed</strong>
+            </div>
+            <p>{status.message}</p>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => void handleSubmit()}
+            >
+              <Icon name="refresh" size={14} />
+              Retry preview
             </button>
           </div>
         );
       case 'success': {
         const result = status.result;
         return (
-          <div>
-            <p className="audience-size">
-              Audience size: <strong>{result.total}</strong>
-            </p>
-            <p className="results-meta">
-              “{result.name}” as of <code>{result.asOf}</code>
-            </p>
+          <div className="results">
+            <div className="results-summary">
+              <div className="stat">
+                <span className="stat-number">{result.total}</span>
+                <span className="stat-label">
+                  matching user{result.total === 1 ? '' : 's'}
+                </span>
+              </div>
+              <div className="results-meta">
+                <span className="meta-name">“{result.name}”</span>
+                <span className="meta-asof">
+                  <Icon name="clock" size={12} />
+                  as of {result.asOf}
+                </span>
+              </div>
+            </div>
             <ul className="member-list">
               {result.members.map((member) => (
                 <li key={member.anonymousId} className="member-card">
-                  <code className="member-id">{member.anonymousId}</code>
-                  <ul className="evidence">
-                    {member.evidence.map((item, evidenceIndex) => (
-                      <li key={evidenceIndex}>
-                        <code>{item.eventType}</code>
-                        <span className="evidence-detail">
-                          observed {item.observedCount} · needs {operatorPhrase(item.operator)}{' '}
-                          {item.expectedCount} within {item.withinDays} days
-                        </span>
-                        <span className={`pill ${item.passed ? 'pill-pass' : 'pill-fail'}`}>
-                          {item.passed ? 'met' : 'not met'}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  <span className="member-avatar" aria-hidden="true">
+                    {member.anonymousId.replace(/\D/g, '').slice(-2) || '?'}
+                  </span>
+                  <div className="member-body">
+                    <code className="member-id">{member.anonymousId}</code>
+                    <ul className="evidence">
+                      {member.evidence.map((item, evidenceIndex) => (
+                        <li key={evidenceIndex} className="evidence-chip">
+                          <code>{item.eventType}</code>
+                          <span className="evidence-count">{item.observedCount}</span>
+                          <span className="evidence-requirement">
+                            needs {operatorGlyph(item.operator)}
+                            {item.expectedCount} in {item.withinDays}d
+                          </span>
+                          <Icon name="check" size={12} />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -208,17 +259,32 @@ export default function App() {
 
   return (
     <div className="page">
-      <header className="page-header">
-        <h1>AudienceIQ</h1>
-        <p>
-          Define audience rules over anonymous product events and preview the matching audience
-          with per-user evidence.
-        </p>
+      <header className="app-bar">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true">
+            <Icon name="chart" size={16} />
+          </span>
+          <div className="brand-text">
+            <span className="brand-name">AudienceIQ</span>
+            <span className="brand-sub">Mable Audience Builder</span>
+          </div>
+        </div>
+        <span className={`api-chip api-${apiStatus}`} role="status">
+          <span className="api-dot" aria-hidden="true" />
+          {apiStatus === 'checking' ? 'checking API' : apiStatus === 'online' ? 'API online' : 'API offline'}
+        </span>
       </header>
 
       <main className="layout">
         <section className="card rule-card" aria-labelledby="rule-heading">
-          <h2 id="rule-heading">Audience definition</h2>
+          <div className="card-header">
+            <h2 id="rule-heading">Audience definition</h2>
+            <p>
+              Pick events, thresholds and time windows. Conditions are combined with AND, and
+              evaluation is pinned to <code>asOf</code> so previews are reproducible.
+            </p>
+          </div>
+
           <form onSubmit={(event) => void handleSubmit(event)} noValidate>
             <div className="field">
               <label htmlFor="audience-name">Audience name</label>
@@ -237,57 +303,77 @@ export default function App() {
               <input
                 id="as-of"
                 type="text"
+                className="input-mono"
                 value={asOf}
                 onChange={(event) => setAsOf(event.target.value)}
                 aria-describedby="as-of-hint"
                 spellCheck={false}
               />
               <p id="as-of-hint" className="hint">
-                ISO 8601 timestamp such as 2026-09-29T00:00:00.000Z. Evaluation is relative to
-                this instant, never the server clock, so previews are reproducible.
+                ISO 8601 timestamp, e.g. 2026-09-29T00:00:00.000Z
               </p>
             </div>
 
-            <fieldset className="conditions">
-              <legend>Conditions (combined with AND)</legend>
+            <div className="field conditions-head">
+              <span className="label-like" aria-hidden="true">
+                Conditions
+              </span>
+            </div>
+
+            <div className="conditions" role="group" aria-label="Audience conditions (combined with AND)">
               {conditions.map((entry, index) => (
-                <ConditionRow
-                  key={entry.id}
-                  index={index}
-                  condition={entry.condition}
-                  canRemove={conditions.length > 1}
-                  onChange={(patch) => updateCondition(entry.id, patch)}
-                  onRemove={() => removeCondition(entry.id)}
-                />
+                <div key={entry.id} className="condition-block">
+                  {index > 0 && (
+                    <div className="condition-divider" aria-hidden="true">
+                      <span>AND</span>
+                    </div>
+                  )}
+                  <ConditionRow
+                    index={index}
+                    condition={entry.condition}
+                    canRemove={conditions.length > 1}
+                    onChange={(patch) => updateCondition(entry.id, patch)}
+                    onRemove={() => removeCondition(entry.id)}
+                  />
+                </div>
               ))}
+            </div>
+
+            <div className="builder-actions">
               <button
                 type="button"
-                className="button secondary"
+                className="button ghost"
                 onClick={addCondition}
                 disabled={conditions.length >= MAX_CONDITIONS}
               >
-                + Add condition
+                <Icon name="plus" size={14} />
+                Add condition
               </button>
-            </fieldset>
-
-            <div className="actions">
               <button
                 type="submit"
                 className="button primary"
                 disabled={status.kind === 'loading'}
                 aria-busy={status.kind === 'loading'}
               >
-                Preview audience
+                <Icon name="zap" size={14} />
+                {status.kind === 'loading' ? 'Previewing…' : 'Preview audience'}
               </button>
             </div>
           </form>
         </section>
 
         <section className="card results-card" aria-labelledby="results-heading" aria-live="polite">
-          <h2 id="results-heading">Preview results</h2>
+          <div className="card-header">
+            <h2 id="results-heading">Preview</h2>
+            <p>Matching results come from the backend API. The frontend never computes membership.</p>
+          </div>
           {renderResults()}
         </section>
       </main>
+
+      <footer className="page-footer">
+        AudienceIQ · synthetic anonymous event data only · no personal information
+      </footer>
     </div>
   );
 }

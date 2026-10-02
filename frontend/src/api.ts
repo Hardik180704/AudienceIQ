@@ -14,6 +14,15 @@ export class ApiError extends Error {
   }
 }
 
+export async function checkHealth(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/health`);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function previewAudience(request: AudienceRequest): Promise<PreviewResponse> {
   let response: Response;
   try {

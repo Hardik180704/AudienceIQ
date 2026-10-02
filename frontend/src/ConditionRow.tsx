@@ -1,5 +1,6 @@
 import { EVENT_TYPES, OPERATORS } from './types';
 import type { Condition, Operator } from './types';
+import Icon from './icons';
 
 interface ConditionRowProps {
   index: number;
@@ -24,6 +25,9 @@ export default function ConditionRow({
 
   return (
     <div className="condition-row">
+      <span className="condition-index" aria-hidden="true">
+        {index + 1}
+      </span>
       <div className="condition-fields">
         <div className="field">
           <label htmlFor={fieldId('event-type')}>Event type</label>
@@ -87,12 +91,13 @@ export default function ConditionRow({
 
       <button
         type="button"
-        className="button secondary remove-button"
+        className="button icon-danger"
         onClick={onRemove}
         disabled={!canRemove}
         aria-label={`Remove condition ${index + 1}`}
+        title={`Remove condition ${index + 1}`}
       >
-        Remove
+        <Icon name="trash" size={15} />
       </button>
     </div>
   );
